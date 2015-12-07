@@ -20,7 +20,7 @@ instructions: |
   through the basics of PHP and it's uses.
 
   If you chose to enable PHPMyAdmin, you can access it using the username and
-  password found in the Credentails section, with the URL listed under
+  password found in the Credentials section, with the URL listed under
   PHPMyAdmin URL.
 
   #### Scaling out
@@ -80,7 +80,7 @@ instructions: |
   You can add additional servers to this deployment by updating the
   "server_count" parameter for this stack. This deployment is
   intended for low to medium traffic production websites and can be
-  scaled as needed to accomodate future growth.
+  scaled as needed to accommodate future growth.
   
   This stack will not ensure that PHP or the servers themselves are
   up-to-date.  You are responsible for ensuring that all software is
