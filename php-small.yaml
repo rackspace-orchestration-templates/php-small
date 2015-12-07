@@ -1,0 +1,407 @@
+heat_template_version: 2015-10-15
+
+description: |
+ #### Production
+ 
+parameter_groups:
+- label: PHP Settings
+  parameters:
+  - php_url
+  - db_user
+  - db_name
+  - php_myadmin
+parameters:
+  #PHP Customization
+  php_url:
+    type: string
+    default: example.com
+    label: Site Domain
+    description: Domain used to configure Nginx
+    constraints:
+    - allowed_pattern: "^[a-zA-Z0-9.-]{1,255}.[a-zA-Z]{2,15}$"
+      description: Must be a valid domain name
+  db_user:
+    type: string
+    default: example
+    label: Database User
+    description: Username to configure for SQL
+    constraints:
+    - allowed_pattern: "^[a-zA-Z0-9.-]{1,255}$"
+      description: Must only contain alphanumeric characters, '-', and '.'
+  db_name:
+    type: string
+    default: example
+    label: Database Name
+    description: Database to configure in SQL
+    constraints:
+    - allowed_pattern: "^[a-zA-Z0-9.-]{1,255}$"
+      description: Must only contain alphanumeric characters, '-', and '.'
+  php_myadmin:
+    type: boolean
+    default: false
+    label: PHPMyAdmin
+    description: Enable or disable PHPMyAdmin
+  backup_email:
+    type: string
+    default: admin@example.com
+    label: E-mail
+    description: E-mail address to be notified for failing backups
+  #Advanced Options
+  lsync_directory:
+    type: string
+    default: "/var/www"
+    label: Shared Directory
+    description: This directory will be synchronized between all servers within this stack.  Leave blank to manually configure Lsyncd
+  server_flavor:
+    type: string
+    default: 4 GB General Purpose v1
+    label: Server Flavor
+    description: Flavor of Cloud Server to be used for all servers in this stack
+    constraints:
+    - allowed_values:
+      - 1 GB General Purpose v1
+      - 2 GB General Purpose v1
+      - 4 GB General Purpose v1
+      - 8 GB General Purpose v1
+#  server_image:
+#    type: string
+#    default: da1fc2aa-0dda-4adc-ac6a-b64e7dcddfd2
+#    label: Server Image
+#    description: Image to be used for all servers in this stack
+#    constraints:
+#    - allowed_values:
+#      - da1fc2aa-0dda-4adc-ac6a-b64e7dcddfd2
+  server_count:
+    type: number
+    default: 0
+    label: Number of Secondary Servers
+    description: Number of secondary web nodes
+    constraints:
+      - range: { min: 0, max: 10 }
+
+resources:
+  #Passwords
+  database_pass:
+    type: OS::Heat::RandomString
+  holland_pass:
+    type: OS::Heat::RandomString
+  #SSH Key
+  ssh_key:
+    type: OS::Nova::KeyPair
+    properties:
+      name: { get_param: "OS::stack_id" }
+      save_private_key: true
+  #Cloud Database
+  php_database:
+    type: OS::Trove::Instance
+    properties:
+      name:
+        str_replace:
+          template: stack_Database
+          params:
+            stack: { get_param: "OS::stack_name" }
+      flavor: 1GB Instance
+      size: 5
+      datastore_type: mysql
+      datastore_version: "5.6"
+      databases:
+      - name: { get_param: db_name }
+      users:
+      - name: { get_param: db_user }
+        password: { get_attr: [database_pass, value] }
+        databases: [ { get_param: db_name } ]
+      - name: holland
+        password: { get_attr: [holland_pass, value] }
+        databases: [ { get_param: db_name } ]
+  #Software Configurations
+  upload_role_config:
+    type: OS::Heat::SoftwareConfig
+    properties:
+      group: script
+      outputs:
+      - name: results
+      config: |
+        #!/bin/bash
+        set -e
+        git clone -b 'update-standardization' --single-branch --progress https://github.com/rackspace-orchestration-templates/ansible-roles.git /etc/ansible/roles > $heat_outputs_path.results 2>&1
+
+  php_config:
+    type: OS::Heat::SoftwareConfig
+    properties:
+      group: ansible
+      config: |
+        ---
+        - name: Install and configure PHP
+          hosts: localhost
+          connection: local
+          roles:
+          - common
+          - nginx
+          - php-fpm
+          - holland
+          - phpmyadmin
+  other_config:
+    type: OS::Heat::SoftwareConfig
+    properties:
+      group: ansible
+      inputs:
+      - default: "[]"
+        name: lsync_dirs
+        type: CommaDelimitedList
+      - default: "[]"
+        name: lsync_servers
+        type: CommaDelimitedList
+      - default: "[]"
+        name: firewall_nodes
+        type: CommaDelimitedList
+      - default: "[]"
+        name: firewall_node_rules
+        type: CommaDelimitedList
+      config: |
+        ---
+        - name: Install and configure other things
+          hosts: localhost
+          connection: local
+          roles:
+          - firewall
+          - lsync
+  deploy_roles:
+    type: OS::Heat::SoftwareDeployment
+    properties:
+      signal_transport: TEMP_URL_SIGNAL
+      config:
+        get_resource: upload_role_config
+      server:
+        get_resource: php_server
+  deploy_php:
+    type: OS::Heat::SoftwareDeployment
+    depends_on: deploy_roles
+    properties:
+      signal_transport: TEMP_URL_SIGNAL
+      input_values:
+        nginx_vhost_str: { get_param: php_url }
+        nginx_vhost_template: "default"
+        nginx_vhost_phpmyadmin: { get_param: php_myadmin }
+        tz: "America/Chicago"
+        holland_mysql_user: "holland"
+        holland_mysql_password: {  get_attr: [holland_pass, value] }
+        holland_mysql_host: { get_attr: [php_database, hostname] }
+        holland_create_user: "no"
+        phpmyadmin_host: { get_attr: [php_database, hostname] }
+      config:
+        get_resource: php_config
+      server:
+        get_resource: php_server
+  other_php:
+    type: OS::Heat::SoftwareDeployment
+    depends_on: deploy_roles
+    properties:
+      signal_transport: TEMP_URL_SIGNAL
+      input_values:
+        lsync_dirs: [ { get_param: lsync_directory } ]
+        lsync_private_key: { get_attr: [ssh_key, private_key] }
+        lsync_servers: { get_attr: [php_secondary, private_ip] }
+        firewall_global_rules: [ "0.0.0.0,0,22,tcp", "0.0.0.0,0,80,tcp", "0.0.0.0,0,443,tcp"]
+        firewall_nodes: { get_attr: [php_secondary, private_ip] }
+        firewall_node_rules: []
+      config:
+        get_resource: other_config
+      server:
+        get_resource: php_server
+  #Master Server
+  php_server:
+    type: OS::Nova::Server
+    properties:
+      name: { get_param: "OS::stack_name" }
+#      image: { get_param: server_image }
+      image: da1fc2aa-0dda-4adc-ac6a-b64e7dcddfd2
+      flavor: { get_param: server_flavor }
+      key_name: { get_resource: ssh_key }
+      software_config_transport: POLL_TEMP_URL
+      config_drive: true
+      user_data_format: SOFTWARE_CONFIG
+      metadata:
+        rax-heat: { get_param: "OS::stack_id" }
+        build_config: "backup_agent_only,monitoring_defaults"
+  #Monitoring Checks
+  php_server_http_check:
+    type: Rackspace::CloudMonitoring::Check
+    depends_on: deploy_php
+    properties:
+      entity: { get_resource: php_server }
+      type: remote.http
+      label:
+        str_replace:
+          template: stack Master HTTP Check
+          params:
+            stack: { get_param: "OS::stack_name" }
+      details:
+        url:
+          str_replace:
+            template: "http://ipaddr"
+            params:
+              ipaddr: { get_attr: [php_server, accessIPv4] }
+      metadata:
+        rax-heat: { get_param: "OS::stack_id" }
+        stack-name: { get_param: "OS::stack_name" }
+      period: 120
+      timeout: 10
+      monitoring_zones_poll:
+      - Northern Virginia (IAD)
+      - Chicago (ORD)
+      - Dallas Fort Worth (DFW)
+      - London (LON)
+      target_hostname: { get_attr: [php_server, accessIPv4] }
+      target_receiver: IPv4
+  load_balancer_http_check:
+    type: Rackspace::CloudMonitoring::Check
+    depends_on: load_balancer
+    properties:
+      entity: { get_resource: php_server }
+      type: remote.http
+      label:
+        str_replace:
+          template: stack Load Balancer HTTP Check
+          params:
+            stack: { get_param: "OS::stack_name" }
+      details:
+        url:
+          str_replace:
+            template: "http://ipaddr"
+            params:
+              ipaddr: { get_attr: [load_balancer, PublicIp] }
+      metadata:
+        rax-heat: { get_param: "OS::stack_id" }
+        stack-name: { get_param: "OS::stack_name" }
+      period: 120
+      timeout: 10
+      monitoring_zones_poll:
+      - Northern Virginia (IAD)
+      - Chicago (ORD)
+      - Dallas Fort Worth (DFW)
+      - London (LON)
+      target_hostname: { get_attr: [load_balancer, PublicIp] }
+      target_receiver: IPv4
+  #Cloud Backup
+  php_backup:
+    type: Rackspace::Cloud::BackupConfig
+    depends_on: php_server
+    properties:
+      host_ip_address: { get_attr: [php_server, accessIPv4] }
+      BackupConfigurationName:
+        str_replace:
+          template: stack Weekly Backup
+          params:
+            stack: { get_param: "OS::stack_name" }
+      Inclusions:
+      - FilePath: "/var/spool/holland"
+        FileItemType: "Folder"
+      - FilePath: "/var/www"
+        FileItemType: "Folder"
+      NotifyFailure: true
+      NotifyRecipients: { get_param: backup_email }
+      TimeZoneId: Central Standard Time
+      StartTimeAmPm: AM
+      StartTimeHour: 1
+      StartTimeMinute: 0
+      HourInterval: null
+      DayOfWeekId: 0
+      Frequency: "Weekly"
+      VersionRetention: 30
+  #Secondary Server
+  php_secondary:
+    type: OS::Heat::ResourceGroup
+    properties:
+      count: { get_param: server_count }
+      resource_def:
+        type: https://raw.githubusercontent.com/rackspace-orchestration-templates/php-small/master/php-small-secondary.yaml
+        properties:
+          ssh_key: { get_resource: ssh_key }
+          parent_stack_id: { get_param: "OS::stack_id" }
+#          server_image: { get_param: server_image }
+          server_image: da1fc2aa-0dda-4adc-ac6a-b64e7dcddfd2
+          server_flavor: { get_param: server_flavor }
+          apache_default_domain: { get_param: php_url }
+          php_myadmin: { get_param: php_myadmin }
+          server_name:
+            str_replace:
+              template: stack-secondary-%index%
+              params:
+                stack: { get_param: "OS::stack_name" }
+          master_server: { get_attr: [php_server, networks, private, 0] }
+  #Cloud Load Balancer
+  load_balancer:
+    type: Rackspace::Cloud::LoadBalancer
+    depends_on:
+    - deploy_php
+    - php_secondary
+    properties:
+      name:
+        str_replace:
+          template: stack_Load_Balancer
+          params:
+            stack: { get_param: "OS::stack_name" }
+      nodes:
+      - addresses: [ { get_attr: [php_server, networks, private, 0] } ]
+        port: 80
+        condition: ENABLED
+      - addresses: { get_attr: [php_secondary, private_ip] }
+        port: 80
+        condition: ENABLED
+      port: 80
+      protocol: HTTP
+      algorithm: ROUND_ROBIN
+      contentCaching: ENABLED
+      sessionPersistence: HTTP_COOKIE
+      virtualIps:
+      - type: PUBLIC
+        ipVersion: IPV4
+      metadata:
+        rax-heat: { get_param: "OS::stack_id" }
+
+outputs:
+  php_public_ip:
+    description: Load Balancer IP
+    value:
+      get_attr: [load_balancer, PublicIp]
+  php_public_url:
+    description: Public URL
+    value:
+      str_replace:
+        template: "http://domain/"
+        params:
+          domain: { get_param: php_url }
+  phpmyadmin_url:
+    description: PHPMyAdmin URL (if enabled)
+    value:
+      str_replace:
+        template: "https://IP/phpmyadmin/"
+        params:
+          IP:
+            get_attr: [php_server, accessIPv4]
+  mysql_user:
+    description: Database User
+    value: { get_param: db_user }
+  mysql_database:
+    description: Database Name
+    value: {get_param: db_name }
+  mysql_password:
+    description: Database Password
+    value:
+      get_attr: [database_pass, value]
+  mysql_host:
+    description: Database Host
+    value:
+      get_attr: [php_database, hostname]
+  ssh_private_key:
+    description: SSH Private Key
+    value:
+      get_attr: [ssh_key, private_key]
+  server_ip:
+    description: Server Public IP
+    value:
+      get_attr: [php_server, accessIPv4]
+  secondary_ips:
+    description: Secondary Node IPs
+    value:
+      get_attr: [php_secondary, public_ip]
