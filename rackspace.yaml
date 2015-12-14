@@ -1,7 +1,7 @@
 schema-version: 1.0.0
 application-family: Application Frameworks
 application-name: PHP
-flavor: Small
+flavor: Production
 flavor-weight: 1
 popularity: 3
 github-repository-name: php-small
