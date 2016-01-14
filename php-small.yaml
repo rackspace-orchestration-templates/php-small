@@ -142,13 +142,14 @@ resources:
       datastore_version: "5.1"
       databases:
       - name: { get_param: db_name }
+      - name: phpmyadmin
       users:
       - name: { get_param: db_user }
         password: { get_attr: [database_pass, value] }
-        databases: [ { get_param: db_name } ]
+        databases: [ { get_param: db_name } , phpmyadmin]
       - name: holland
         password: { get_attr: [holland_pass, value] }
-        databases: [ { get_param: db_name } ]
+        databases: [ { get_param: db_name } , phpmyadmin]
   #Software Configurations
   upload_role_config:
     type: OS::Heat::SoftwareConfig
@@ -224,6 +225,8 @@ resources:
         holland_mysql_host: { get_attr: [php_database, hostname] }
         holland_create_user: "no"
         phpmyadmin_host: { get_attr: [php_database, hostname] }
+        phpmyadmin_user: { get_param: db_user }
+        phpmyadmin_pass: { get_attr: [database_pass, value] }
       config:
         get_resource: php_config
       server:
