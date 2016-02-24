@@ -137,9 +137,6 @@ resources:
       flavor: { get_param: database_flavor }
       size: { get_param: database_disk }
       datastore_type: mysql
-#      Not available in all regions.
-#      datastore_version: "5.6"
-      datastore_version: "5.6"
       databases:
       - name: { get_param: db_name }
       - name: phpmyadmin
@@ -358,7 +355,7 @@ resources:
           ssh_key: { get_resource: ssh_key }
           parent_stack_id: { get_param: "OS::stack_id" }
 #          server_image: { get_param: server_image }
-          server_image: fcbdef81-a2cd-49c0-8228-322385d1cb10
+          server_image: f4bbbce2-50b0-4b07-bf09-96c175a45f4b
           server_flavor: { get_param: server_flavor }
           apache_default_domain: { get_param: php_url }
           php_myadmin: { get_param: php_myadmin }
