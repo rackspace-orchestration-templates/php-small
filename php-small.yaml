@@ -396,8 +396,7 @@ resources:
               params:
                 stack: { get_param: "OS::stack_name" }
           master_server: { get_attr: [php_server, networks, private, 0] }
-          ansible_branch: { get_param: ansible_branch}
-          ansible_repo: { get_param: ansible_repo }
+          ansible_source: { get_param: ansible_source }
   #Cloud Load Balancer
   load_balancer:
     type: Rackspace::Cloud::LoadBalancer
