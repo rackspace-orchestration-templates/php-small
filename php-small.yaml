@@ -43,7 +43,7 @@ parameters:
     label: Database User
     description: Username to configure for SQL
     constraints:
-    - allowed_pattern: "^[a-zA-Z0-9.\-_]{1,255}$"
+    - allowed_pattern: "^[a-zA-Z0-9.-_]{1,255}$"
       description: Must only contain alphanumeric characters, '-', '_', and '.'
     immutable: true
   db_name:
@@ -52,7 +52,7 @@ parameters:
     label: Database Name
     description: Database to configure in SQL
     constraints:
-    - allowed_pattern: "^[a-zA-Z0-9.\-_]{1,255}$"
+    - allowed_pattern: "^[a-zA-Z0-9.-_]{1,255}$"
       description: Must only contain alphanumeric characters, '-', '_', and '.'
     immutable: true
   php_myadmin:
