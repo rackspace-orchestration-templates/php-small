@@ -53,18 +53,11 @@ and will be automatically synchronized to all secondary nodes.  By default,
 /var/www will be synchronized, unless otherwise specified during setup.
 
 MySQL is being hosted on a Cloud Database instance, running MySQL 5.6.
-Backups for MySQL are provided by [Holland](http://wiki.hollandbackup.org/),
-which is running on the Master server.
+Backups will need to be configured manually.
 
 Backups are configured using Cloud Backups.  The Master server is configured
-to back up /var/spool/holland and /var/www once per week, and to retain
+to back up /var/www once per week, and to retain
 these backups for 30 days.
-
-In order to restore the Database from backup, you will need to first restore
-/var/spool/holland from the appropriate Cloud Backup.  After you have done so,
-you will need to log into the Master server and restore the Holland backup
-to the Cloud Database via the MySQL client.  For more assistance, please
-contact your Support team.
 
 Monitoring is configured to verify that nginx is running on both the Master
 and all secondary servers, as well as that the Cloud Load Balancer is
@@ -142,16 +135,16 @@ Outputs
 Once a stack comes online, use `heat output-list` to see all available outputs.
 Use `heat output-show <OUTPUT NAME>` to get the value of a specific output.
 
-* `php_public_ip`: Load Balancer IP 
-* `php_public_url`: Public URL 
-* `phpmyadmin_url`: PHPMyAdmin URL (if enabled) 
-* `mysql_user`: Database User 
-* `mysql_database`: Database Name 
-* `mysql_password`: Database Password 
-* `mysql_host`: Database Host 
-* `ssh_private_key`: SSH Private Key 
-* `server_ip`: Server Public IP 
-* `secondary_ips`: Secondary Node IPs 
+* `php_public_ip`: Load Balancer IP
+* `php_public_url`: Public URL
+* `phpmyadmin_url`: PHPMyAdmin URL (if enabled)
+* `mysql_user`: Database User
+* `mysql_database`: Database Name
+* `mysql_password`: Database Password
+* `mysql_host`: Database Host
+* `ssh_private_key`: SSH Private Key
+* `server_ip`: Server Public IP
+* `secondary_ips`: Secondary Node IPs
 
 For multi-line values, the response will come in an escaped form. To get rid of
 the escapes, use `echo -e '<STRING>' > file.txt`. For vim users, a substitution

@@ -25,7 +25,7 @@ parameters:
     description: Image to be used for all servers in this stack
     constraints:
     - allowed_values:
-      - Ubuntu 14.04 LTS (Trusty Tahr) (PVHVM) (Orchestration)
+      - Ubuntu 16.04 LTS (Xenial Xerus) (PVHVM) (Orchestration)
       - CentOS 7 (PVHVM) (Orchestration)
     immutable: true
   ssh_key:
